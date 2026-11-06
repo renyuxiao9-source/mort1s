@@ -42,7 +42,7 @@
       <p id="notice" class="notice" role="status" hidden></p>
       <section id="routes" class="panel">
         <div class="section-head">
-          <div><h2>模型路由</h2><p class="muted">客户端填别名，候选从上到下尝试。</p></div>
+          <div><h2>模型路由</h2><p class="muted">同档账号轮询，按档位顺序降级。</p></div>
           <div class="actions"><button id="refresh" type="button">刷新</button><button id="add-route" class="primary" type="button">＋ 路由</button></div>
         </div>
         <div id="route-list" class="stack"></div>
@@ -89,7 +89,7 @@
     <form id="route-form" class="stack">
       <h2 id="route-title">添加路由</h2>
       <label>模型别名<input name="alias" required maxlength="64" pattern="[a-zA-Z0-9][a-zA-Z0-9_.\-]{0,63}" autocapitalize="none" spellcheck="false" placeholder="例如：auto"></label>
-      <p class="muted small">将首选模型排在最上面。RPM、RPD 填 0 时由上游限流。</p>
+      <p class="muted small">将首选模型排在最上面。勾选同档轮询即可把多个账号合在一档。RPM、RPD 填 0 时由上游限流。</p>
       <div id="targets" class="stack"></div>
       <button id="add-target" type="button">＋ 添加候选</button>
       <p class="error form-error" role="alert" hidden></p>
@@ -100,6 +100,7 @@
   <template id="target-template">
     <fieldset class="target">
       <legend></legend>
+      <label class="check"><input name="joinPrevious" type="checkbox">与上一候选同档轮询</label>
       <label>上游渠道<select name="channel" required></select></label>
       <label>上游模型 ID<input name="model" required maxlength="160" autocapitalize="none" spellcheck="false" placeholder="填写服务商提供的模型 ID"></label>
       <div class="limits">

@@ -115,12 +115,15 @@ function render() {
 
   const routeCards = state.routes.map((route, index) => {
     const card = element('article', 'card');
-    card.append(cardTitle(route.id, `${route.targets.length} 个候选`, [
+    const tierCount = route.targets.filter((target) => !target.joinPrevious).length;
+    card.append(cardTitle(route.id, `${tierCount} 档 · ${route.targets.length} 个候选`, [
       button('编辑', () => editRoute(route)),
       button('删除', () => removeRoute(route)),
     ]));
     const list = element('ol', 'route-list');
+    let tier = 0;
     route.targets.forEach((target, position) => {
+      if (!target.joinPrevious) tier += 1;
       const channel = channels.get(target.channel);
       const status = state.status[index].targets[position];
       const row = element('li', 'route-item');
@@ -136,7 +139,7 @@ function render() {
       if (status.until) usage.push(`恢复 ${new Date(status.until).toLocaleString()}`);
       main.append(title, element('p', 'muted small', usage.join(' · ')));
       const statusClass = status.reason === 'ready' ? ' good' : status.reason === 'disabled' ? '' : ' warn';
-      row.append(element('span', 'position', String(position + 1).padStart(2, '0')), main,
+      row.append(element('span', 'position', `第 ${tier} 档`), main,
         element('span', `badge${statusClass}`, labels[status.reason]));
       list.append(row);
     });
@@ -259,10 +262,17 @@ fields(channelForm).provider.addEventListener('change', () => {
   setupChannelFields();
 });
 
+const joinPreviousInput = (row) => row.querySelector('[name="joinPrevious"]');
+
 function renumberTargets() {
   const rows = [...targetList.children];
+  let tier = 0;
   rows.forEach((row, index) => {
-    row.querySelector('legend').textContent = `候选 ${index + 1}`;
+    const join = joinPreviousInput(row);
+    if (index === 0) join.checked = false;
+    join.closest('label').hidden = index === 0;
+    if (!join.checked) tier += 1;
+    row.querySelector('legend').textContent = `候选 ${index + 1} · 第 ${tier} 档`;
     row.querySelector('[data-move="-1"]').disabled = index === 0;
     row.querySelector('[data-move="1"]').disabled = index === rows.length - 1;
     row.querySelector('[data-remove]').disabled = rows.length === 1;
@@ -275,6 +285,7 @@ function addTarget(target) {
   const channel = row.querySelector('[name="channel"]');
   channel.replaceChildren(...state.channels.map((item) => new Option(item.name, item.id)));
   channel.value = target?.channel ?? state.channels[0].id;
+  joinPreviousInput(row).checked = target?.joinPrevious ?? false;
   for (const [name, fallback] of [['model', ''], ['rpm', 0], ['rpd', 0]]) {
     row.querySelector(`[name="${name}"]`).value = target?.[name] ?? fallback;
   }
@@ -297,10 +308,24 @@ targetList.addEventListener('click', (event) => {
   const node = event.target.closest('button');
   if (!node) return;
   const row = node.closest('fieldset');
-  if (node.hasAttribute('data-remove')) row.remove();
-  if (node.dataset.move === '-1' && row.previousElementSibling) row.previousElementSibling.before(row);
-  if (node.dataset.move === '1' && row.nextElementSibling) row.nextElementSibling.after(row);
+  const previous = row.previousElementSibling;
+  const next = row.nextElementSibling;
+  if (node.hasAttribute('data-remove')) {
+    if (!joinPreviousInput(row).checked && next) joinPreviousInput(next).checked = false;
+    row.remove();
+  }
+  const neighbor = node.dataset.move === '-1' ? previous : next;
+  if (node.dataset.move && neighbor) {
+    const join = joinPreviousInput(row);
+    const neighborJoin = joinPreviousInput(neighbor);
+    [join.checked, neighborJoin.checked] = [neighborJoin.checked, join.checked];
+    if (node.dataset.move === '-1') neighbor.before(row);
+    else neighbor.after(row);
+  }
   renumberTargets();
+});
+targetList.addEventListener('change', (event) => {
+  if (event.target.name === 'joinPrevious') renumberTargets();
 });
 
 async function saveForm(form, dialog, update, tab) {
@@ -349,6 +374,7 @@ routeForm.addEventListener('submit', (event) => {
       model: row.querySelector('[name="model"]').value.trim(),
       rpm: row.querySelector('[name="rpm"]').valueAsNumber,
       rpd: row.querySelector('[name="rpd"]').valueAsNumber,
+      joinPrevious: joinPreviousInput(row).checked,
     })),
   };
   const routes = editingRoute ? state.routes.map((item) => item.id === editingRoute.id ? route : item) : [...state.routes, route];
