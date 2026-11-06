@@ -7,7 +7,7 @@
 通过 Git 安装可以比较本地版本和 GitHub 上的提交。
 
 ```sh
-pkg update
+pkg upgrade
 pkg install -y git nodejs-lts
 cd "$HOME"
 git clone https://github.com/renyuxiao9-source/mort1s.git
@@ -19,7 +19,7 @@ node server.mjs
 把 `termux-api-hub.zip` 下载到手机的 Download 目录。在 Termux 执行以下命令，按系统提示授权共享存储访问。
 
 ```sh
-pkg update
+pkg upgrade
 pkg install nodejs-lts unzip
 termux-setup-storage
 cd "$HOME"
@@ -29,6 +29,8 @@ node server.mjs
 ```
 
 要求 Node.js 22 或更高版本。项目没有 npm 依赖。默认监听 `127.0.0.1:8787`，可通过 `HUB_PORT=8788 node server.mjs` 更改端口。关闭进程后，客户端需要等服务重启。希望手机锁屏后继续运行时，可以在 Termux 执行 `termux-wake-lock`，并按需调整系统对 Termux 的电池限制。
+
+如果 `node --version` 报 `CANNOT LINK EXECUTABLE`，先运行 `pkg upgrade` 完整升级 Termux 软件包，再检查 Node.js 版本。升级后仍报错时，可以运行 `pkg reinstall libc++ nodejs-lts`，再用 `node --version` 验证。[Termux 动态链接错误说明](https://github.com/termux/termux-packages/wiki/Termux-execution-environment#dynamic-library-linking-errors)
 
 ## 检查更新
 
