@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { createGateway } from './server.mjs';
+import { createUpdateChecker } from './updates.mjs';
 
 async function listen(server) {
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -23,7 +24,7 @@ const complete = (res, model) => res.end(JSON.stringify({
   choices: [{ index: 0, message: { role: 'assistant', content: '正常回答' }, finish_reason: 'stop' }],
 }));
 
-async function fixture(t, handle) {
+async function fixture(t, handle, options) {
   const calls = [];
   const upstream = createServer(async (req, res) => {
     const chunks = [];
@@ -37,7 +38,7 @@ async function fixture(t, handle) {
   let gateway;
   let url;
   const start = async () => {
-    gateway = createGateway(dataDir);
+    gateway = createGateway(dataDir, options);
     url = await listen(gateway.server);
   };
   await start();
@@ -79,6 +80,39 @@ async function fixture(t, handle) {
 
 const candidate = (channel, model, { rpm = 0, rpd = 0 } = {}) => ({ channel, model, rpm, rpd });
 const route = (...targets) => [{ id: 'auto', targets }];
+
+test('update checks require the admin key and report the running and remote revisions', async (t) => {
+  const installed = 'a'.repeat(40);
+  const nativeFetch = globalThis.fetch;
+  let latest = 'b'.repeat(40);
+  let checks = 0;
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    if (url !== 'https://api.github.com/repos/renyuxiao9-source/mort1s/git/ref/heads/main') {
+      return nativeFetch(url, options);
+    }
+    assert.equal(new Headers(options.headers).has('Authorization'), false);
+    checks += 1;
+    return latest ? Response.json({ object: { sha: latest } }) : new Response(null, { status: 503 });
+  });
+  const f = await fixture(t, () => {}, { checkUpdates: createUpdateChecker(installed) });
+  assert.equal((await f.send('/admin/updates', f.keys.gatewayKey)).status, 401);
+  assert.equal(checks, 0);
+
+  const check = async () => {
+    const response = await f.send('/admin/updates', f.keys.adminKey);
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  const different = await check();
+  assert.equal(different.status, 'different');
+  assert.equal(different.local, installed);
+  assert.equal(different.latest, latest);
+  latest = installed;
+  assert.equal((await check()).status, 'current');
+  latest = null;
+  assert.equal((await check()).status, 'unavailable');
+  assert.equal(checks, 3);
+});
 
 test('separates API and admin credentials, redacts upstream keys and rejects stale changes', async (t) => {
   const f = await fixture(t, (_, res, data) => complete(res, data.model));

@@ -4,6 +4,18 @@
 
 ## 在 Termux 启动
 
+通过 Git 安装可以比较本地版本和 GitHub 上的提交。
+
+```sh
+pkg update
+pkg install -y git nodejs-lts
+cd "$HOME"
+git clone https://github.com/renyuxiao9-source/mort1s.git
+cd mort1s
+bash enable-update-check.sh
+node server.mjs
+```
+
 把 `termux-api-hub.zip` 下载到手机的 Download 目录。在 Termux 执行以下命令，按系统提示授权共享存储访问。
 
 ```sh
@@ -17,6 +29,12 @@ node server.mjs
 ```
 
 要求 Node.js 22 或更高版本。项目没有 npm 依赖。默认监听 `127.0.0.1:8787`，可通过 `HUB_PORT=8788 node server.mjs` 更改端口。关闭进程后，客户端需要等服务重启。希望手机锁屏后继续运行时，可以在 Termux 执行 `termux-wake-lock`，并按需调整系统对 Termux 的电池限制。
+
+## 检查更新
+
+- 运行一次 `bash enable-update-check.sh`，之后每次打开 Termux 的 Bash 登录会话都会检查更新。脚本会在 Bash 读取的个人启动文件末尾添加一段标记代码。删除 `# mort1s-update-check` 和 `# end mort1s-update-check` 之间的整段代码即可关闭。
+- WebUI 登录后自动检查一次。点击右上角「检查更新」可以再次查询。也可以在 Termux 项目目录运行 `node updates.mjs`。
+- 检查只读取 GitHub `main` 的提交号。通过 ZIP 安装时会显示远端提交。通过 Git 安装且版本不同时，可停止网关，在项目目录运行 `git pull --ff-only`，再运行 `node server.mjs`。
 
 ## 配置第一个别名
 

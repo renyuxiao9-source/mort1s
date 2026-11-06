@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compileConfig, HttpError, openStore, providers } from './config.mjs';
 import { createRouter } from './router.mjs';
+import { createUpdateChecker } from './updates.mjs';
 
 const publicAssets = new Map([
   ['/', ['index.html', 'text/html']],
@@ -51,7 +52,7 @@ async function readJson(req, maxBytes) {
   }
 }
 
-export function createGateway(dir) {
+export function createGateway(dir, { checkUpdates = createUpdateChecker() } = {}) {
   const store = openStore(dir);
   const router = createRouter(store);
   const assets = new Map([...publicAssets].map(([path, [name, type]]) =>
@@ -81,6 +82,12 @@ export function createGateway(dir) {
       }
       if (req.method === 'GET' && path === '/healthz') {
         json(res, 200, { status: 'ok' });
+        return;
+      }
+      if (req.method === 'GET' && path === '/admin/updates') {
+        authenticate(req, store.state.adminKey);
+        const result = await checkUpdates();
+        if (!res.destroyed) json(res, 200, result);
         return;
       }
       if (path === '/admin/state' && ['GET', 'PUT'].includes(req.method)) {
