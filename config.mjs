@@ -75,11 +75,16 @@ export function validateConfig(input, previous) {
     requireConfig(isSlug(item?.id) && !routeIds.has(item.id), '模型别名无效或重复。');
     requireConfig(isArray(item.targets, 1, 12), '每条路由须有 1–12 个候选。');
     routeIds.add(item.id);
-    const targets = item.targets.map((target) => {
+    const targets = item.targets.map((target, index) => {
       requireConfig(channelIds.has(target?.channel), '候选渠道不存在。请先移除路由中的引用。');
       requireConfig(isModel(target.model), '请填写上游模型 ID。');
       requireConfig(isLimit(target.rpm, 10000) && isLimit(target.rpd, 10000000), 'RPM 或 RPD 超出有效范围。');
-      return { channel: target.channel, model: target.model, rpm: target.rpm, rpd: target.rpd };
+      requireConfig(target.joinPrevious === undefined || typeof target.joinPrevious === 'boolean', '候选的同档设置无效。');
+      requireConfig(index > 0 || !target.joinPrevious, '第一项须独立开启第一档。');
+      return {
+        channel: target.channel, model: target.model, rpm: target.rpm, rpd: target.rpd,
+        ...(target.joinPrevious ? { joinPrevious: true } : {}),
+      };
     });
     requireConfig(new Set(targets.map(({ channel, model }) => `${channel}:${model}`)).size === targets.length, '同一条路由不能重复添加同一渠道和模型。');
     return { id: item.id, targets };
@@ -100,16 +105,18 @@ export function compileConfig(config) {
   const channels = new Map(config.channels.map((channel) => [channel.id, channel]));
   const limits = new Map();
   const routes = new Map(config.routes.map((route) => {
-    const targets = route.targets.map(({ channel: id, model, rpm, rpd }) => {
+    const pools = [];
+    for (const { channel: id, model, rpm, rpd, joinPrevious } of route.targets) {
       const channel = channels.get(id);
       const bucket = quotaBucket(channel, model);
       if (channel.enabled) {
         const current = limits.get(bucket) ?? { rpm: 0, rpd: 0 };
         limits.set(bucket, { rpm: stricterLimit(current.rpm, rpm), rpd: stricterLimit(current.rpd, rpd) });
       }
-      return { channel, model, bucket };
-    });
-    return [route.id, targets];
+      if (!joinPrevious || !pools.length) pools.push([]);
+      pools.at(-1).push({ channel, model, bucket });
+    }
+    return [route.id, pools];
   }));
   return { routes, limits };
 }

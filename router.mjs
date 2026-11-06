@@ -182,7 +182,18 @@ async function forward(target, request, res, clientSignal, firstTimeout) {
 
 export function createRouter(store) {
   const health = new Map();
+  const poolCursors = new WeakMap();
   const targetId = (target) => `${target.channel.id}:${target.model}`;
+
+  function* orderedCandidates(pools) {
+    for (const pool of pools) {
+      const start = poolCursors.get(pool) ?? 0;
+      for (let offset = 0; offset < pool.length; offset += 1) {
+        const index = (start + offset) % pool.length;
+        yield { pool, index, target: pool[index] };
+      }
+    }
+  }
 
   function availability(target, limits, now) {
     const { channel, bucket } = target;
@@ -206,21 +217,22 @@ export function createRouter(store) {
     resetHealth() { health.clear(); },
     status(config) {
       const now = Date.now();
-      return [...config.routes].map(([id, targets]) => ({
+      return [...config.routes].map(([id, pools]) => ({
         id,
-        targets: targets.map((target) => {
+        targets: pools.flat().map((target) => {
           const { day, recent, ...status } = availability(target, config.limits, now);
           return status;
         }),
       }));
     },
     async run(config, request, res, signal) {
-      const targets = config.routes.get(request.model);
-      if (!targets) throw new HttpError(404, '模型别名不存在，请查看 /v1/models。', 'model_not_found');
+      const pools = config.routes.get(request.model);
+      if (!pools) throw new HttpError(404, '模型别名不存在，请查看 /v1/models。', 'model_not_found');
       const deadline = Date.now() + 90_000;
       const skipped = [];
       const failedBuckets = new Set();
-      for (const target of targets) {
+      let startedPool;
+      for (const { pool, index, target } of orderedCandidates(pools)) {
         if (signal.aborted) return;
         const now = Date.now();
         if (now >= deadline) break;
@@ -237,6 +249,11 @@ export function createRouter(store) {
           recent: state.rpm ? [...state.recent, now] : [],
           updated: now,
         });
+        // Advance from the first eligible account before waiting for the upstream.
+        if (pool !== startedPool) {
+          poolCursors.set(pool, (index + 1) % pool.length);
+          startedPool = pool;
+        }
         try {
           await forward(target, request, res, signal, Math.min(45_000, deadline - now));
           return;

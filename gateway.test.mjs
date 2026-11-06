@@ -148,6 +148,37 @@ test('reserves a shared daily slot before awaiting upstream and retains it after
   assert.equal(f.calls.filter(({ model }) => model === 'main').length, 1);
 });
 
+test('rotates same-tier accounts and degrades only after the entire tier is unavailable', async (t) => {
+  const tried = new Set();
+  const f = await fixture(t, (req, res, data) => {
+    const key = req.headers.authorization;
+    if (data.model === 'main' && tried.has(key)) {
+      res.writeHead(429, { 'Retry-After': '60' });
+      res.end();
+      return;
+    }
+    tried.add(key);
+    complete(res, data.model);
+  });
+  const saved = await f.config([f.channel('account-a'), f.channel('account-b'), f.channel('fallback')], route(
+    candidate('account-a', 'main'),
+    { ...candidate('account-b', 'main'), joinPrevious: true },
+    candidate('fallback', 'lighter'),
+  ));
+  assert.equal(saved.routes[0].targets[1].joinPrevious, true);
+  for (const account of ['account-a', 'account-b', 'fallback']) {
+    const response = await f.chat();
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('X-Gateway-Channel'), account);
+    await response.json();
+  }
+  assert.deepEqual(f.calls.map(({ key }) => key), [
+    'Bearer key-account-a', 'Bearer key-account-b', 'Bearer key-account-a', 'Bearer key-account-b', 'Bearer key-fallback',
+  ]);
+  const status = await (await f.send('/admin/state', f.keys.adminKey)).json();
+  assert.deepEqual(status.status[0].targets.map(({ reason }) => reason), ['rate_limit', 'rate_limit', 'ready']);
+});
+
 test('enforces rolling RPM without calling upstream again', async (t) => {
   const f = await fixture(t, (_, res, data) => complete(res, data.model));
   await f.config([f.channel('primary')], route(candidate('primary', 'main', { rpm: 1 })));
