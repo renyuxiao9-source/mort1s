@@ -17,6 +17,7 @@ let state;
 let editingChannel;
 let editingRoute;
 let testController;
+let updateController;
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -171,8 +172,9 @@ async function signIn(key) {
     $('#admin-key').value = '';
     $('#login-panel').hidden = true;
     $('#dashboard').hidden = false;
-    $('#logout').hidden = false;
+    $('#dashboard-actions').hidden = false;
     showTab('routes');
+    void checkForUpdates();
   } catch (error) {
     adminKey = '';
     sessionStorage.removeItem('hub-admin');
@@ -190,18 +192,45 @@ loginForm.addEventListener('submit', (event) => {
 $('#logout').addEventListener('click', () => {
   testController?.abort();
   testController = undefined;
+  updateController?.abort();
+  updateController = undefined;
   adminKey = '';
   state = undefined;
   sessionStorage.removeItem('hub-admin');
   $('#gateway-key').value = '';
   message($('#test-hit'));
   message($('#test-result'));
+  message($('#update-status'));
   $('#test-stop').hidden = true;
   $('#login-panel').hidden = false;
   $('#dashboard').hidden = true;
-  $('#logout').hidden = true;
+  $('#dashboard-actions').hidden = true;
   $('#admin-key').focus();
 });
+
+async function checkForUpdates() {
+  if (!adminKey || updateController) return;
+  const controller = new AbortController();
+  updateController = controller;
+  const button = $('#update-check');
+  const status = $('#update-status');
+  button.disabled = true;
+  message(status, '正在检查更新…');
+  try {
+    const response = await request('/admin/updates', adminKey, { signal: controller.signal });
+    const result = await response.json();
+    if (!controller.signal.aborted) message(status, result.message);
+  } catch {
+    if (!controller.signal.aborted) message(status, '检查更新失败。可以稍后重试。');
+  } finally {
+    if (updateController === controller) {
+      updateController = undefined;
+      button.disabled = false;
+    }
+  }
+}
+
+$('#update-check').addEventListener('click', checkForUpdates);
 
 async function copy(value) {
   try {

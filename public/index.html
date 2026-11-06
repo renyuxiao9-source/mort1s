@@ -12,7 +12,10 @@
   <main class="shell">
     <header class="masthead">
       <div class="brand"><span class="mark" aria-hidden="true">⇉</span><div><h1>汇流</h1><p>TERMUX API 网关</p></div></div>
-      <button id="logout" class="quiet" type="button" hidden>退出</button>
+      <div id="dashboard-actions" class="actions" hidden>
+        <button id="update-check" type="button">检查更新</button>
+        <button id="logout" class="quiet" type="button">退出</button>
+      </div>
     </header>
 
     <section id="login-panel" class="card login">
@@ -33,6 +36,7 @@
         <div class="copy-row"><input id="api-base" readonly><button id="copy-base" type="button">复制</button></div>
         <label for="gateway-key">客户端 Key</label>
         <div class="copy-row"><input id="gateway-key" type="password" readonly autocomplete="off"><button id="copy-key" type="button">复制</button></div>
+        <p id="update-status" class="muted" role="status" hidden></p>
       </section>
       <nav class="tabs" aria-label="控制台">
         <button type="button" data-tab="routes" aria-pressed="true">模型路由</button>
